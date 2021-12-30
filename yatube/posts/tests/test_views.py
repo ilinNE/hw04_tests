@@ -32,7 +32,6 @@ class PostsPagesTests(TestCase):
         )
 
     def setUp(self):
-        self.user = PostsPagesTests.user
         self.authorized_client = Client()
         self.authorized_client.force_login(self.user)
         Group.objects.create(
@@ -46,13 +45,13 @@ class PostsPagesTests(TestCase):
         templates_pages_names = {
             reverse('posts:index'): 'posts/index.html',
             reverse('posts:group_list',
-                    kwargs={'slug': 'test-group'}): 'posts/group_list.html',
+                    args=(self.group.slug,)): 'posts/group_list.html',
             reverse('posts:profile',
-                    kwargs={'username': 'tester'}): 'posts/profile.html',
+                    args=(self.user.username,)): 'posts/profile.html',
             reverse('posts:post_detail',
-                    kwargs={'post_id': '2'}): 'posts/post_detail.html',
+                    args=(self.post.id,)): 'posts/post_detail.html',
             reverse('posts:post_edit',
-                    kwargs={'post_id': '2'}): 'posts/create_post.html',
+                    args=(self.post.id,)): 'posts/create_post.html',
             reverse('posts:post_create'): 'posts/create_post.html',
         }
         for reverse_name, template in templates_pages_names.items():
@@ -64,37 +63,35 @@ class PostsPagesTests(TestCase):
         """На главной странице список постов"""
         response = self.authorized_client.get(reverse('posts:index'))
         first_post = response.context['page_obj'][0]
-        self.assertEqual(first_post.author.username, 'tester')
-        self.assertEqual(first_post.text, 'Тестовый текст c текстом')
-        self.assertEqual(first_post.group.title, 'Тестовая группа')
+        self.assertEqual(first_post.author.username, self.post.author.username)
+        self.assertEqual(first_post.text, self.post.text)
+        self.assertEqual(first_post.group.title, self.post.group.title)
+        self.assertEqual(first_post.id, self.post.id)
 
     def test_posts_group_show_correct_context(self):
         """На странице группы только посты этой группы"""
-        slug = 'test-group'
         response = self.authorized_client.get(reverse(
-            'posts:group_list', kwargs={'slug': slug}))
+            'posts:group_list', args=(self.group.slug,)))
         posts_set = response.context['page_obj']
         for post in posts_set:
             with self.subTest(post=post):
-                self.assertEqual(post.group.slug, slug)
+                self.assertEqual(post.group.slug, self.group.slug)
 
     def test_posts_profile_show_correct_context(self):
         """На странице группы только посты этой группы"""
-        username = 'tester'
         response = self.authorized_client.get(reverse(
-            'posts:profile', kwargs={'username': username}))
+            'posts:profile', args=(self.user.username,)))
         posts_set = response.context['page_obj']
         for post in posts_set:
             with self.subTest(post=post):
-                self.assertEqual(post.author.username, username)
+                self.assertEqual(post.author.username, self.user.username)
 
     def test_posts_detail_post_show_correct_context(self):
-        """На странице группы только посты этой группы"""
-        post_id = 1
+        """Страница поста содержит правильный пост"""
         response = self.authorized_client.get(reverse(
-            'posts:post_detail', kwargs={'post_id': post_id}))
+            'posts:post_detail', args=(self.post.id,)))
         posts_from_page = response.context['post']
-        self.assertEqual(posts_from_page.pk, post_id)
+        self.assertEqual(posts_from_page.id, self.post.id)
 
     def test_posts_create_post_correct_context(self):
         """Форма создания поста корректна"""
@@ -111,9 +108,8 @@ class PostsPagesTests(TestCase):
 
     def test_posts_edit_post_correct_context(self):
         """Форма редактированя поста корректна"""
-        post_id = 2
         response = self.authorized_client.get(reverse('posts:post_edit',
-                                                      kwargs={'post_id': '2'}))
+                                                      args=(self.post.id,)))
         form_fields = {
             'text': forms.fields.CharField,
             'group': forms.fields.ChoiceField,
@@ -124,28 +120,27 @@ class PostsPagesTests(TestCase):
                 form_field = response.context.get('form').fields.get(value)
                 self.assertIsInstance(form_field, expected)
         editable_post_id = response.context.get('post_id')
-        self.assertEqual(editable_post_id, post_id)
+        self.assertEqual(editable_post_id, self.post.id)
 
     def test_posts_new_post_with_group_created(self):
         """Новый пост с группой размещен правильно"""
-        post = PostsPagesTests.post
-        adress_list = {
-            'posts:index': '',
-            'posts:group_list': {'slug': 'test-group'},
-            'posts:profile': {'username': 'tester'}
-        }
-        group_set = Group.objects.exclude(slug=post.group.slug)
+        adress_list = [
+            reverse('posts:index'),
+            reverse('posts:group_list', args=(self.group.slug,)),
+            reverse('posts:profile', args=(self.user.username,)),
+        ]
+        group_set = Group.objects.exclude(slug=self.post.group.slug)
         for group in group_set:
             with self.subTest(group=group):
                 response = self.client.get(reverse(
-                    'posts:group_list', kwargs={'slug': group.slug}
+                    'posts:group_list', args=(self.group.slug,)
                 )
                 )
-                self.assertNotIn(post.pk, response.context.get(
+                self.assertNotIn(self.post.pk, response.context.get(
                     'page_obj').object_list)
 
-        for adress, value in adress_list.items():
+        for adress in adress_list:
             with self.subTest(adress=adress):
-                response = self.client.get(reverse(adress, kwargs=value))
+                response = self.client.get(adress)
                 self.assertEqual(
-                    post.pk, response.context.get('page_obj')[0].pk)
+                    self.post.pk, response.context.get('page_obj')[0].pk)

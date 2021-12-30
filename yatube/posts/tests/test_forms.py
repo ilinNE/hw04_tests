@@ -11,6 +11,9 @@ class PostsFormsTests(TestCase):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
+        cls.not_author = User.objects.create_user(username='passenger')
+        cls.not_author_client = Client()
+        cls.not_author_client.force_login(cls.not_author)
 
     def setUp(self):
         self.user = User.objects.create_user(username='testuser')
@@ -21,7 +24,7 @@ class PostsFormsTests(TestCase):
             slug='test-group',
             description='Описание тестовой группы'
         )
-        Post.objects.create(
+        self.post = Post.objects.create(
             text='Исходный текст',
             author=self.user,
         )
@@ -30,8 +33,8 @@ class PostsFormsTests(TestCase):
         posts_count = Post.objects.count()
         """Валидная форма создает пост"""
         form_data = {
-            'text': 'sdfsdfd',
-            'group': 1,
+            'text': 'Новый пост',
+            'group': self.group.id,
         }
         response = self.authorized_client.post(
             reverse('posts:post_create'),
@@ -39,23 +42,71 @@ class PostsFormsTests(TestCase):
         )
         self.assertRedirects(
             response,
-            reverse('posts:profile', args=('testuser',))
+            reverse('posts:profile', args=(self.user,))
         )
+
         self.assertEqual(Post.objects.count(), posts_count + 1)
+        self.assertEqual(Post.objects.last().text, form_data['text'])
+        self.assertEqual(Post.objects.last().group.id, form_data['group'])
 
     def test_edit_post(self):
         """Валидная форма редактирует пост"""
         form_data = {
             'text': 'Измененный текст',
-            'group': 1,
+            'group': self.group.id,
         }
         response = self.authorized_client.post(
-            reverse('posts:post_edit', kwargs={'post_id': '1'}),
+            reverse('posts:post_edit', args={self.post.id, }),
             data=form_data,
         )
-        post = Post.objects.get(pk=1)
+
         self.assertRedirects(
             response,
-            reverse('posts:post_detail', args=('1',))
+            reverse('posts:post_detail', args=(self.post.id,))
         )
-        self.assertEqual(post.text, 'Измененный текст')
+        print(type(self.post))
+        self.assertEqual(Post.objects.last().text, form_data['text'])
+        self.assertEqual(Post.objects.last().group.id, form_data['group'])
+
+    def test_unauthorized_user_create_post(self):
+        posts_count = Post.objects.count()
+        """Неавторизованый пользователь не может создать пост"""
+        form_data = {
+            'text': 'Жалкая попытка',
+            'group': self.group.id,
+        }
+        self.client.post(
+            reverse('posts:post_create'),
+            data=form_data,
+        )
+        self.assertEqual(Post.objects.count(), posts_count)
+
+    def test_unauthorized_edit_post(self):
+        """Неавторизованый пользователь не может редактировать пост"""
+        source_text = self.post.text
+        sorce_group = self.post.group
+        form_data = {
+            'text': 'Измененный текст',
+            'group': self.group.id,
+        }
+        self.client.post(
+            reverse('posts:post_edit', args=(self.post.id,)),
+            data=form_data,
+        )
+        self.assertEqual(Post.objects.last().text, source_text)
+        self.assertEqual(Post.objects.last().group, sorce_group)
+
+    def test_not_author_edit_post(self):
+        """Не автор поста не может редактировать пост"""
+        source_text = self.post.text
+        sorce_group = self.post.group
+        form_data = {
+            'text': 'Измененный текст',
+            'group': self.group.id,
+        }
+        self.not_author_client.post(
+            reverse('posts:post_edit', args=(self.post.id,)),
+            data=form_data,
+        )
+        self.assertEqual(Post.objects.last().text, source_text)
+        self.assertEqual(Post.objects.last().group, sorce_group)
