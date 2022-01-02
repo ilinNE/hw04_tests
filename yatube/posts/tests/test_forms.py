@@ -45,9 +45,10 @@ class PostsFormsTests(TestCase):
             reverse('posts:profile', args=(self.user,))
         )
 
+        new_post = Post.objects.select_related('group').order_by('-id')[0]
         self.assertEqual(Post.objects.count(), posts_count + 1)
-        self.assertEqual(Post.objects.last().text, form_data['text'])
-        self.assertEqual(Post.objects.last().group.id, form_data['group'])
+        self.assertEqual(new_post.text, form_data['text'])
+        self.assertEqual(new_post.group.id, form_data['group'])
 
     def test_edit_post(self):
         """Валидная форма редактирует пост"""
@@ -64,9 +65,9 @@ class PostsFormsTests(TestCase):
             response,
             reverse('posts:post_detail', args=(self.post.id,))
         )
-        print(type(self.post))
-        self.assertEqual(Post.objects.last().text, form_data['text'])
-        self.assertEqual(Post.objects.last().group.id, form_data['group'])
+        edited_post = Post.objects.select_related('group').get(id=self.post.id)
+        self.assertEqual(edited_post.text, form_data['text'])
+        self.assertEqual(edited_post.group.id, form_data['group'])
 
     def test_unauthorized_user_create_post(self):
         posts_count = Post.objects.count()
@@ -93,8 +94,9 @@ class PostsFormsTests(TestCase):
             reverse('posts:post_edit', args=(self.post.id,)),
             data=form_data,
         )
-        self.assertEqual(Post.objects.last().text, source_text)
-        self.assertEqual(Post.objects.last().group, sorce_group)
+        edited_post = Post.objects.select_related('group').get(id=self.post.id)
+        self.assertEqual(edited_post.text, source_text)
+        self.assertEqual(edited_post.group, sorce_group)
 
     def test_not_author_edit_post(self):
         """Не автор поста не может редактировать пост"""
@@ -108,5 +110,6 @@ class PostsFormsTests(TestCase):
             reverse('posts:post_edit', args=(self.post.id,)),
             data=form_data,
         )
-        self.assertEqual(Post.objects.last().text, source_text)
-        self.assertEqual(Post.objects.last().group, sorce_group)
+        edited_post = Post.objects.select_related('group').get(id=self.post.id)
+        self.assertEqual(edited_post.text, source_text)
+        self.assertEqual(edited_post.group, sorce_group)
